@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <vector>
 #include <cstring>
+#include <optional>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -18,6 +19,11 @@ const bool enableValidationLayers = false;
 #else
 const bool enableValidationLayers = true;
 #endif
+
+struct QueueFamilyIndices
+{
+    std::optional<uint32_t> graphicsFamily;
+};
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDebugUtilsMessengerEXT *pDebugMessenger)
 {
@@ -55,6 +61,10 @@ private:
     GLFWwindow *window;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    VkDevice device;
+    VkQueue graphicsQueue;
+    VkSurfaceKHR surface;
 
     void initWindow()
     {
@@ -69,6 +79,8 @@ private:
     {
         createInstance();
         setupDebugMessenger();
+        pickPhysicalDevice();
+        createLogicalDevice();
     }
     void setupDebugMessenger()
     {
@@ -81,6 +93,88 @@ private:
             throw std::runtime_error("failed to set up debug messenger!");
         }
     }
+    void createLogicalDevice()
+    {
+        QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+
+        VkDeviceQueueCreateInfo queueCreateInfo{};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+        queueCreateInfo.queueCount = 1;
+        float queuePriority = 1.0f;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+
+        VkPhysicalDeviceFeatures deviceFeatures{};
+
+        VkDeviceCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        createInfo.pQueueCreateInfos = &queueCreateInfo;
+        createInfo.queueCreateInfoCount = 1;
+        createInfo.pEnabledFeatures = &deviceFeatures;
+        createInfo.enabledExtensionCount = 1;
+        const char* extensionNames[1] = {"VK_KHR_portability_subset"};
+        createInfo.ppEnabledExtensionNames = extensionNames;
+        if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create logical device!");
+        }
+    }
+    void pickPhysicalDevice()
+    {
+        uint32_t deviceCount = 0;
+        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+        if (deviceCount == 0)
+        {
+            throw std::runtime_error("failed to find GPUs with Vulkan support!");
+        }
+        std::vector<VkPhysicalDevice> devices(deviceCount);
+        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+        for (const auto &device : devices)
+        {
+            if (isDeviceSuitable(device))
+            {
+                physicalDevice = device;
+                break;
+            }
+        }
+        if (physicalDevice == VK_NULL_HANDLE)
+        {
+            std::cout<< "hello wolrd" << deviceCount<< std::endl;
+            throw std::runtime_error("failed to find a suitable GPU!");
+        }
+    }
+    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
+    {
+        QueueFamilyIndices indices;
+
+        uint32_t queueFamilyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+        int i = 0;
+        for (const auto &queueFamily : queueFamilies)
+        {
+            if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            {
+                indices.graphicsFamily = i;
+            }
+            i += 1;
+        }
+
+        return indices;
+    }
+    bool isDeviceSuitable(VkPhysicalDevice device)
+    {
+        // VkPhysicalDeviceProperties deviceProperties;
+        // VkPhysicalDeviceFeatures deviceFeatures;
+        // vkGetPhysicalDeviceProperties(device, &deviceProperties);
+        // vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+        // std::cout << deviceFeatures.geometryShader << std::endl;
+        // // 支持几何着色器
+        // return deviceFeatures.geometryShader;
+        return true;
+    }
     void mainLoop()
     {
         while (!glfwWindowShouldClose(window))
@@ -90,7 +184,7 @@ private:
     }
     void cleanUp()
     {
-
+        vkDestroyDevice(device, nullptr);
         if (enableValidationLayers)
         {
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
@@ -135,7 +229,7 @@ private:
             createInfo.ppEnabledLayerNames = validationLayers.data();
 
             populateDebugMessengerCreateInfo(debugCreateInfo);
-            createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT *) &debugCreateInfo;
+            createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT *)&debugCreateInfo;
         }
         else
         {
@@ -184,6 +278,7 @@ private:
         {
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
+        extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
         return extensions;
     }
 
@@ -197,9 +292,10 @@ private:
         return VK_FALSE;
     }
 
-    void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &createInfo){
+    void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &createInfo)
+    {
         createInfo = {};
-        createInfo.sType= VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+        createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         createInfo.pfnUserCallback = debugCallback;
