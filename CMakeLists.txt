@@ -13,6 +13,7 @@ add_executable(${Program})
 target_include_directories(
     ${Program}
     PRIVATE
+    include
 )
 
 target_link_libraries(
@@ -25,5 +26,7 @@ target_link_libraries(
 target_sources(
     ${Program}
     PRIVATE
+    src/framework/window.cpp
+    src/framework/application.cpp
     src/main.cpp
 )

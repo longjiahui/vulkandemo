@@ -54,6 +54,9 @@
         "algorithm": "cpp",
         "__tree": "cpp",
         "fstream": "cpp",
-        "set": "cpp"
+        "set": "cpp",
+        "span": "cpp",
+        "charconv": "cpp",
+        "forward_list": "cpp"
     }
 }
